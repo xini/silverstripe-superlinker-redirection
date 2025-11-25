@@ -17,7 +17,8 @@
         "fromholdio/silverstripe-superlinker": "^3",
         "fromholdio/silverstripe-relativeurlfield": "^1.2",
         "fromholdio/silverstripe-hidden-pages": "^2",
-        "stevie-mayhew/hasoneedit": "^2.2"
+        "stevie-mayhew/hasoneedit": "^2.2",
+        "unclecheese/display-logic": "^3.0.0"
     },
     "autoload": {
         "psr-4": {
