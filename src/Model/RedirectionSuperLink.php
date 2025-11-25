@@ -14,8 +14,12 @@ use SilverStripe\Forms\FieldList;
 use SilverStripe\Forms\LiteralField;
 use SilverStripe\Forms\OptionsetField;
 use SilverStripe\Forms\ReadonlyField;
+use SilverStripe\Forms\TextareaField;
+use SilverStripe\Forms\TextField;
+use SilverStripe\Forms\ToggleCompositeField;
 use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\ORM\FieldType\DBHTMLText;
+use UncleCheese\DisplayLogic\Forms\Wrapper;
 
 class RedirectionSuperLink extends SuperLink
 {
@@ -25,7 +29,10 @@ class RedirectionSuperLink extends SuperLink
 
     private static $db = [
         'RedirectionFromRelativeURL' => 'Varchar',
-        'RedirectionResponseCode' => 'Int'
+        'RedirectionResponseCode' => 'Int',
+        'UTMSource' => 'Varchar',
+        'UTMMedium' => 'Varchar',
+        'UTMCampaign' => 'Varchar',
     ];
 
     private static $belongs_to = [
@@ -33,6 +40,8 @@ class RedirectionSuperLink extends SuperLink
     ];
 
     private static $redirection_default_response_code = 301;
+
+    private static $enable_utm_parameters = true;
 
     private static $redirection_response_codes = [
         301 => 'Moved permanently',
@@ -159,6 +168,23 @@ class RedirectionSuperLink extends SuperLink
         return $url;
     }
 
+    public function getURL(): ?string
+    {
+        $url = parent::getURL();
+        $this->extend('updateURL', $url);
+        if (static::config()->get('enable_utm_parameters')
+            && ($this->LinkType == 'sitetree' || $this->LinkType == 'file')
+        ) {
+            $url = Controller::join_links(
+                $url,
+                $this->UTMSource ? '?utm_source=' . $this->UTMSource : '',
+                $this->UTMMedium ? '?utm_medium=' . $this->UTMMedium : '',
+                $this->UTMCampaign ? '?utm_campaign=' . $this->UTMCampaign : '',
+            );
+        }
+        return $url;
+    }
+
     public function isCMSFieldsReadonly(): bool
     {
         $curr = Controller::curr();
@@ -217,7 +243,6 @@ class RedirectionSuperLink extends SuperLink
                 $fields->push($toURLField);
             }
 
-            $this->extend('updateCMSLinkFields', $fields, $fieldPrefix);
         }
         else {
             $fields = parent::getCMSLinkFields($fieldPrefix);
@@ -234,7 +259,29 @@ class RedirectionSuperLink extends SuperLink
 
             $fromURLField->setBaseURL($this->getBaseAbsoluteURL());
             $fields->insertAfter($fieldPrefix . 'RedirectionResponseCode', $fromURLField);
+
+            if (static::config()->get('enable_utm_parameters')) {
+                $fields->push(
+                    $utmFields = Wrapper::create(
+                        ToggleCompositeField::create(
+                            'UTMParameters',
+                            _t(__CLASS__.'.UTMParameters', 'UTM tracking parameters'),
+                            [
+                                TextField::create("UTMSource", _t(__CLASS__.'.UTMSource', 'Source'))
+                                    ->setDescription(_t(__CLASS__.'.UTMSourceDescription', 'Identifies the source of your traffic (e.g. newsletter, social media platform name, specific website name)')),
+                                TextField::create("UTMMedium", _t(__CLASS__.'.UTMMedium', 'Medium'))
+                                    ->setDescription(_t(__CLASS__.'.UTMMediumDescription', 'Identifies the marketing medium used (e.g. email, cpc, social, rss, qrcode)')),
+                                TextField::create("UTMCampaign", _t(__CLASS__.'.UTMCampaign', 'Campaign'))
+                                    ->setDescription(_t(__CLASS__.'.UTMCampaignDescription', 'Identifies a specific product promotion or strategic campaign (e.g. summer_sale or promo')),
+                            ]
+                        )
+                    )
+                );
+                $utmFields->displayIf('LinkType')->isEqualTo('sitetree')->orIf("LinkType")->isEqualTo("file");
+            }
         }
+
+        $this->extend('updateCMSLinkFields', $fields, $fieldPrefix);
 
         return $fields;
     }
@@ -247,5 +294,14 @@ class RedirectionSuperLink extends SuperLink
             }
         }
         return parent::canDelete($member);
+    }
+
+    protected function onBeforeWrite()
+    {
+        parent::onBeforeWrite();
+
+        $this->UTMSource = str_replace(' ', '_', mb_trim($this->UTMSource));
+        $this->UTMMedium = str_replace(' ', '_', mb_trim($this->UTMMedium));
+        $this->UTMCampaign = str_replace(' ', '_', mb_trim($this->UTMCampaign));
     }
 }
